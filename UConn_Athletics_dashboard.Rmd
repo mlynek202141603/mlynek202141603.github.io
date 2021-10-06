@@ -1,0 +1,591 @@
+---
+title: "UConn Athletics Expenses, 2015-2020"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    vertical_layout: fill
+    theme: cerulean
+---
+<style>
+    .navbar {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      display: block;
+      position: fixed;
+      width: 215px; /* Modify the width of the sidebar */
+    }
+    .navbar-brand {
+    font-size: 17px;
+    }
+    body {
+      margin-left: 215px; /* Add a left margin to avoid content overlay */
+      padding-top:0px
+    }
+    </style>
+    
+    
+```{r setup, include=FALSE}
+library(plotly)
+library(MASS)
+library(ggcorrplot)
+library(formattable)
+library(flexdashboard)
+library(ggplot2)
+library(readxl)
+
+athletics <- read.csv("~/Desktop/Rowing/athletics.csv")
+athletics$cost.per.player<-athletics$total.by.team/athletics$number.of.players
+athletics$diff<-athletics$revenue-athletics$total.by.team
+athletics$Year<-as.factor(athletics$Year)
+athletics$team<-paste(athletics$Gender, athletics$Sport)
+athletics$diff.player<-athletics$diff/athletics$number.of.players
+levels(athletics$Gender)<-c("Men", "None", "Women")
+for (i in 4:31){
+  athletics[,i]<-as.numeric(athletics[,i])
+}
+
+paired.athletics<-athletics[athletics$Sport=="Basketball" |
+                              athletics$Sport=="Soccer" |
+                              athletics$Sport=="Ice Hockey" |
+                              athletics$Sport=="Swimming and Diving" |
+                              athletics$Sport=="Tennis" |
+                              athletics$Sport=="Basketball" |
+                              athletics$Sport=="Track and Field, X-Country",]
+
+
+
+sum_athletics_full<-aggregate(athletics[,c(4:31,33)], by=list(athletics$Gender, athletics$Year), sum)
+sum_athletics<-sum_athletics_full[sum_athletics_full$Group.1=="Men" | sum_athletics_full$Group.1=="Women",]
+sum_athletics_by_year<-aggregate(athletics[,c(4:31,33)], by=list(athletics$Year), sum)
+sum_paired_athletics<-aggregate(paired.athletics[,c(4:31,33)], by=list(paired.athletics$Gender, paired.athletics$Year), sum)
+sum_paired_athletics<-sum_paired_athletics[sum_paired_athletics$Group.1=="Men" | sum_paired_athletics$Group.1=="Women",]
+
+avg_athletics<-aggregate(athletics[,c(4:31,33)], by=list(athletics$Gender, athletics$Year), mean)
+avg_athletics<-avg_athletics[avg_athletics$Group.1=="Men" | avg_athletics$Group.1=="Women",]
+
+avg_paired_athletics<-aggregate(paired.athletics[,c(4:31,33)], by=list(paired.athletics$Gender, paired.athletics$Year), mean)
+avg_paired_athletics<-avg_paired_athletics[avg_paired_athletics$Group.1=="Men" | avg_paired_athletics$Group.1=="Women",]
+
+athletics2<-athletics[athletics$Gender=="Men" | athletics$Gender=="Women",]
+
+
+
+
+model_final<-lm(log(athletics$revenue+1)~athletics$Equivalencies.Awarded+ 
+            athletics$Head.coaches.expenses+
+            athletics$Assistant.Coaches.expenses+ 
+            athletics$Support.Staff.Expenses+ 
+            athletics$Recruiting+
+            athletics$Travel+
+            athletics$Equipment+
+            athletics$Fund.Raising..Marketing..Promotion+
+              athletics$Spirit.Groups+
+              athletics$Facilities.Debt.Service..Rental.Fee+
+              athletics$Administrative.Expenses+
+              athletics$Memberships.and.Dues+
+              athletics$Other+
+              athletics$number.of.players, 
+          data=athletics, na.action = na.omit)
+
+step_nogender<-stepAIC(model_final, direction = "both")
+
+```
+
+Introduction 
+=========================
+
+Column {data-width=950}
+-----------------------------------------------------------------------
+
+
+
+        
+#### Goals:
+
+To analyze expenses and revenues of University of Connecticut (UConn) Athletic Department from 2015 to 2020 in light of recent budget cuts. 
+
+To determine any possible discrepencies in fund allocation between Men's and Women's teams.
+
+To investigate trends of specific expenses by team and gender, and to determine areas of significant increase.
+
+To determine any statistically significant relationship between revenue and expense categories in an effort to increase revenue.
+
+
+#### Data Management:
+
+Data was collected from 2015-2020 reports submitted to NCAA Membership Financial Reporting System by UConn. The reports were aquired through the UConn Public Records Office in accordance with The Freedom of Information Act, 5 U.S.C. § 552. Exploratory and Inferencial Analysis shown here was performed in RStudio using plotly, flexdashboard, MASS, formattable, ggcorrplot and ggplot2 packages.
+
+Author: Magdalene Mlynek
+
+Date: April 30, 2021
+
+### Dashboard Navigation
+1) Introduction
+
+2) Expenses by Gender: Includes data visualizations and discussion of Total Athletic Department Expenses allocated by gender
+
+3) Participation: Includes data visualizations and discussion of total number of unduplicated student athletes
+
+4) Cost per Player: Includes data visulizations and discussion of cost per player by team and gender
+
+5) Profit: Includes data visualizations and discussion of difference between revenue and expenses (profit), by team and gender
+
+6) Profit per Player: Includes data visualizations and discussion of difference between revenue and expenses (profit) divided by team roster size, by team and average by gender
+
+7) Expenses by Team: Provides detailed data visualizations for expenses by team 
+
+8) Revenue Model: Model 
+
+Note: Plots can be further explored by hovering or click-and-dragging over point(s) of interest
+
+
+
+Column {data-width=50}
+-----------------------------------------------------------------------
+
+### Total Expenses, FY2019
+```{r}
+totalexpenses<-sum(athletics$total.by.team[athletics$Year=="2019"])
+totalexpenses<-paste0("$", comma(totalexpenses))
+valueBox(totalexpenses, color = "red")
+```
+
+### Total Expenses, Percent Change FY2015 to FY2019
+```{r}
+totalexpenses2019<-sum(athletics$total.by.team[athletics$Year=="2019"])
+totalexpenses2015<-sum(athletics$total.by.team[athletics$Year=="2015"])
+totalexpenses_pctchange<-(totalexpenses2019-totalexpenses2015)/totalexpenses2015*100
+totalexpenses_pctchange<-paste0("+", comma(totalexpenses_pctchange), "%")
+
+valueBox(totalexpenses_pctchange, color = "red")
+```
+
+### Total Revenue, FY2019
+```{r}
+totalrevenue<-sum(athletics$revenue[athletics$Year=="2019"])
+totalrevenue<-totalrevenue-33516078
+totalrevenue<-paste0("$", comma(totalrevenue))
+valueBox(totalrevenue, color="green")
+```
+
+### Total Revenue, Percent Change FY2015 to FY2019
+```{r}
+totalrevenue2019<-sum(athletics$revenue[athletics$Year=="2019"])
+totalrevenue2019<-totalrevenue2019-33516078
+
+totalrevenue2015<-sum(athletics$revenue[athletics$Year=="2015"])
+totalrevenue2015<-totalrevenue2015-17867971
+
+totalrevenue_pctchange<-(totalrevenue2019-totalrevenue2015)/totalrevenue2015*100
+totalrevenue_pctchange<-paste0(comma(totalrevenue_pctchange), "%")
+
+valueBox(totalrevenue_pctchange, color="green")
+```
+
+
+
+
+
+Participation {data-orientation=rows}
+=====================
+
+#### Participation
+
+In accordance with Title IX, the proportion of male/female student athletes must be proportional to the representation in the overall student body of the university. In 2019, the unduplicated proportion of female student athletes was 49.369% (n=313) and that of male student athletes was 50.631%; in 2018, these percentages were 49.608% (n=316) and 50.392% (n=321) respectively; and in 2017, 48.457% (n=314) and 51.543% (n=334) respectively. The female proportion within the student body at UConn was 51%, 50.5%, and 50.1% in 2019, 2018 and 2017 respectively.
+
+We would expect athletic teams that have both a men's and women's program, for example, Soccer, Ice Hockey and Track and Field, to be easily comparable and  have a similar roster size. However, in 2019, the unduplicated proportion of female student athletes was 48.623% (n=159) and that of male athletes was 51.276% (n=168); in 2018, these percentages were 48.036% (n=159) and 51.964% (n=172) respectively and in 2017, 45.882% (n=156) and 54.118% (n=184) respectively.
+
+
+Row {data-height=550}
+------------------------------------
+
+###All Teams
+
+```{r}
+plot1<-plot_ly(sum_athletics, x=~Group.2, y=~number.of.players, color=~Group.1, type = "scatter", mode='lines')
+plot1<-plot1 %>% layout(title="Number of Players by Gender, 2015-2020", xaxis=list(title="Year"), yaxis=list(title="Number of Players"))
+plot1
+```
+
+
+### Matched Teams Only
+
+```{r}
+plot1.paired<-plot_ly(sum_paired_athletics, x=~Group.2, y=~number.of.players, color=~Group.1, type = "scatter", mode='lines')
+plot1.paired<-plot1.paired %>% layout(title=list(text=paste0("Number of Players by Gender, 2015-2020",
+                                                             '<br>',
+                                                             '<sup>',
+                                                             "Only matched sports")), xaxis=list(title="Year"), yaxis=list(title="Number of Players"))
+plot1.paired
+```
+
+
+
+Expenses by Gender
+=========================
+
+
+Column {data-width=650}
+-----------------------------------------------------------------------
+#### Expenses by Gender
+
+Plots shown here illustrate the expenses allocated by gender. From 2015 to 2019, the spending within Women's teams have slightly increased to about\$22.6M in 2019 from \$19M in 2015. Similarly, spending within Men's teams have increased to \$37.6M in 2019 from \$31.3M in 2015. Spending not allocated by gender has slightly decreased from \$21.7M in 2015 to $20.5M in 2019. 
+
+In FY 2019, Men's teams accounted for nearly half (49.1%) of all department spending, while Women's teams accounted for just over a quarter (27.6%). This percentage of expenses allocated to Men's teams has increased +1.1% from 2018 to 2019 and +2.5% from 2019-2020. However, that of women's teams increased +0.70% from 2018-2019 and decreased -0.4% in 2019 to 2020. In addition, UConn spent 1.74 times more per male athlete than per female atlete in 2020, 1.62 times more in 2019 and 1.703 times more back in 2015.
+
+We should note that while it was expected that expenses would drop slightly in FY 2020 due to the cancellation of spring seasons beginning in March 2020 during the COVID-19 pandemic. However, Men's teams expenses increased +\$1M while Women's teams expenses decreased by -\$0.9M and expenses not allocated by gender decreased by -\$2.2M.
+
+
+### Total Expenses
+
+```{r}
+plot_totalspending<-plot_ly(sum_athletics_full, x=~Group.2, y=~total.by.team, color=~Group.1, type = "scatter", mode='lines')
+plot_totalspending<-plot_totalspending %>% layout(title="Expenses by Gender, 2015-2020", xaxis=list(title="Year"), yaxis=list(title="Cost, in USD"))
+plot_totalspending
+```
+
+```{r}
+gender<-athletics$Gender
+gender<- rep(gender, each=23, times=6)
+year<-c("2015", "2016", "2017", "2018", "2019", "2020")
+year<-rep(year,each=483)
+athletics_long2<-data.frame(year, gender, category, amount)
+athletics_long2$category<-as.character(athletics_long2$category)
+athletics_long2$gender<-as.character(athletics_long2$gender)
+
+
+
+sum_athletics_long2<-aggregate(athletics_long2$amount, by=list(athletics_long2$gender, athletics_long2$category, athletics_long2$year), sum)
+colnames(sum_athletics_long2)<-c("gender", "category", "year", "amount")
+
+large_plot2<-plot_ly(sum_athletics_long2[!(sum_athletics_long2$category=="number.of.players" | sum_athletics_long2$category=="Equivalencies.Awarded" | sum_athletics_long2$category=="Number.of.students.receiving.aid"),], x=~year, y=~amount, frame = ~category, 
+                    color = ~gender, type = "scatter", mode='lines')
+large_plot2<-large_plot2%>% layout(yaxis=list(range=c(0,5500000)))
+large_plot2<-large_plot2 %>% layout(title="Expenses by Team, 2015-2020", xaxis=list(title="Year"), yaxis=list(title="Cost, in USD"))
+large_plot2
+```
+
+
+Column {data-width=350, .tabset}
+-----------------------------------------------------------------------
+
+### FY2020
+
+```{r}
+pie2020<- plot_ly(athletics[athletics$Year=='2020',], labels=~Gender, values=~total.by.team, 
+                  type = 'pie', textposition='inside', textinfo='label+percent', showlegend=FALSE,
+                  insidetextfont=list(color='#FFFFFF'))
+pie2020<-pie2020 %>% layout(title='Total Expenses by Gender, 2020')
+pie2020
+```
+
+### FY2019
+```{r}
+
+pie2019<- plot_ly(athletics[athletics$Year=='2019',], labels=~Gender, values=~total.by.team, 
+                  type = 'pie', textposition='inside', textinfo='label+percent', showlegend=FALSE,
+                  insidetextfont=list(color='#FFFFFF'))
+pie2019<-pie2019 %>% layout(title='Total Expenses by Gender, 2019')
+
+pie2019
+
+
+```
+
+
+
+### FY2018
+```{r}
+pie2018<- plot_ly(athletics[athletics$Year=='2018',], labels=~Gender, values=~total.by.team, 
+                  type = 'pie', textposition='inside', textinfo='label+percent', showlegend=FALSE,
+                  insidetextfont=list(color='#FFFFFF'))
+pie2018<-pie2018 %>% layout(title='Total Expenses by Gender, 2018')
+pie2018
+```
+
+
+
+Expenses by Team
+==============================
+
+Column {data-width=700}
+-----------------------------------------------------------------------
+#### Total Expenses by Team
+
+### Total Expenses
+
+```{r}
+athletics_0428 <- read.csv("~/Desktop/Rowing/athletics_0428.csv", header=FALSE)
+amount<-as.vector(as.matrix(athletics_0428[,c(2:127)]))
+category<-as.vector(as.matrix(athletics_0428$V1))
+category<-rep(category, 126)
+sport<-athletics$team
+sport<-sport[c(1:21)]
+sport<- rep(sport, each=23, times=6)
+year<-c("2015", "2016", "2017", "2018", "2019", "2020")
+year<-rep(year,each=483)
+athletics_long<-data.frame(year, sport, category, amount)
+large_plot<-plot_ly(athletics_long[!(athletics_long$category=="number.of.players" | athletics_long$category=="Equivalencies.Awarded" | athletics_long$category=="Number.of.students.receiving.aid"),], x=~year, y=~amount, frame = ~sport, 
+                    color = ~category, type = "scatter", mode='lines')
+large_plot<-large_plot%>% layout(yaxis=list(range=c(0,5500000)))
+large_plot<-large_plot %>% layout(title="Expenses by Team, 2015-2020", xaxis=list(title="Year"), yaxis=list(title="Cost, in USD"))
+large_plot
+```
+
+
+
+
+
+Column {data-width=300, .tabset}
+-----------------------------------------------------------------------
+
+
+### FY2020
+```{r}
+pie2020_teams<-plot_ly(athletics[athletics$Year=='2020',], labels=~team, values=~total.by.team, 
+                       type = 'pie', textposition='inside', textinfo='label+percent', showlegend=FALSE,
+                       insidetextfont=list(color='#FFFFFF'))
+pie2020_teams<-pie2020_teams %>% layout(title='Total Expenses by Team, 2020')
+pie2020_teams
+```
+
+
+### FY2019
+```{r}
+pie2019_teams<-plot_ly(athletics[athletics$Year=='2019',], labels=~team, values=~total.by.team, 
+                       type = 'pie', textposition='inside', textinfo='label+percent', showlegend=FALSE,
+                       insidetextfont=list(color='#FFFFFF'))
+pie2019_teams<-pie2019_teams %>% layout(title='Total Expenses by Team, 2019')
+pie2019_teams
+```
+
+### FY2018
+```{r}
+
+
+pie2018_teams<-plot_ly(athletics[athletics$Year=='2018',], labels=~team, values=~total.by.team, 
+                       type = 'pie', textposition='inside', textinfo='label+percent', showlegend=FALSE,
+                       insidetextfont=list(color='#FFFFFF'))
+pie2018_teams<-pie2018_teams %>% layout(title='Total Expenses by Team, 2018')
+pie2018_teams
+```
+
+
+
+
+
+
+
+Expenses per Player
+=====================
+
+#### Expenses per Player
+
+The cost per player was found by dividing the total expenses for a single team by its roster size. The plots below show the cost per player within each team, and within Gender, including matched teams.Note that the Cost per Player by Gender plots on the right are averages across Men's teams and Women's teams. In 2019, the teams with the highest cost per player was Women's Basketball and Men's Basketball at \$728.3K and \$659.5K respectively. The teams with the lowest cost per player are Men's Swimming and Diving and Women's Rowing at \$24.8K and \$25.1K respectively. In addition, the cost per player by team within the Women's and Men's Basketball teams have been steadily increasing since 2015 and increased \$206.071K (39.46%) and \$224.01K (51.44%) respectively, from 2015 to 2019.The average cost of a female student athlete across all Women's teams in 2019 was \$118.92K and the average cost of a male student athlete across all Men's teams \$136.28K, meaning the average cost of a male student athlete is 1.146 times more than that of a female student-athlete. In 2020, the average cost per male student athlete increased to 1.236 times the cost of a female student athelete. 
+
+Similar to findings in the "Expenses by Gender" section, we see that from 2019 to 2020, the average cost per player within Women's teams decreased (\$2.225K, 1.5%) while the average cost per player within Men's teams increased (\$7.965K, 5.8%). Completing this same analysis across Men's and Women's teams matched by sport (i.e Men's Soccer and Women's Soccer), we find that the results are flipped, and the average cost of a female student athlete across only matched sports is greater than that of the average male student athlete. In 2020, the cost per player (across matched teams) was nearly equal, however in 2019, the average cost per player within Women's teams was \$12.247K more than that of matched Men's teams.
+
+
+
+Column {data-width=650}
+----------------------------------
+
+### By Team
+```{r}
+plot12<-plot_ly(athletics[athletics$Gender=="Men" | athletics$Gender=="Women",],y=~cost.per.player, x=~Year, color=~team, type = 'scatter', mode='lines')
+plot12<-plot12 %>% layout(title="Cost per player by team, 2015-2020", xaxis=list(title="Year"), yaxis=list(title="Cost per player, in USD"))
+plot12
+```
+
+
+
+Column {data-width=350}
+----------------------------------
+
+### All Teams
+```{r}
+
+
+plot2<-plot_ly(avg_athletics, x=~Group.2, y=~cost.per.player, color=~Group.1, type = "scatter", mode='lines')
+plot2<-plot2 %>% layout(title="Cost per Player by Gender, 2015-2020", xaxis=list(title="Year"), yaxis=list(title="Cost per Player, in USD"))
+plot2
+```
+
+
+### Matched Teams Only
+```{r}
+plot2.paired<-plot_ly(avg_paired_athletics, x=~Group.2, y=~cost.per.player, color=~Group.1, type = "scatter", mode='lines')
+plot2.paired<-plot2.paired %>% layout(title=list(text=paste0("Cost Per Player by Gender, 2015-2020",
+                                                             '<br>',
+                                                             '<sup>',
+                                                             "Only matched sports")), xaxis=list(title="Year"), yaxis=list(title="Cost per Player, in USD"))
+plot2.paired
+```
+
+
+
+
+Profit
+==========================
+
+
+#### Profit
+
+It is important to investigate the profit made within the Athletics Department and individual teams, as large expenses are anticipated to have large returns. The plots below illustrate this difference between revenue and expenses, referred to as profit. Note that across nearly all sports and years (2015-2020), profit is negative, meaning that the expenses are greater than revenue.
+
+Football has the greatest loss of profit of -\$14.86M, -\$13.27M and -\$8.09M in 2020, 2019 and 2018 respectively. In addition, we find that UConn's high profile and "money generating" sports (Football, Men's Basketball, Women's Basketball and Men's Ice Hockey) have the highest loss of profit across all teams. When stratified by gender, the loss of profit in the Men's teams is 76% higher than that of Women's teams. When only analyzed across teams matched by gender, we see that in 2015, the loss of profit was much higher among Women's teams than Men's, hiwever since 2017, the loss of profit of Men's teams has been higher than the  loss of profit of Women's teams.
+
+
+Column {data-width=650}
+----------------------------------
+
+
+### By Team
+```{r}
+plot15<-plot_ly(athletics[athletics$Gender=="Men" | athletics$Gender=="Women",],y=~diff, x=~Year, color=~team, type = 'scatter', mode='lines')
+plot15<-plot15 %>% layout(title="Profit by team, 2015-2020", xaxis=list(title="Year"), yaxis=list(title="Profit, in USD"))
+plot15
+```
+
+
+Column {data-width=350}
+----------------------------------
+
+### All Teams
+```{r}
+
+plot3<-plot_ly(sum_athletics, x=~Group.2, y=~diff, color=~Group.1, type = 'scatter', mode='lines')
+plot3<-plot3 %>% layout(title="Profit by Gender, 2015-2020", xaxis=list(title="Year"), yaxis=list(title="Profit, in USD"))
+plot3
+```
+
+
+
+### Matched Teams Only
+
+```{r}
+plot3.paired<-plot_ly(sum_paired_athletics, x=~Group.2, y=~diff, color=~Group.1, type = 'scatter', mode='lines')
+plot3.paired<-plot3.paired %>% layout(title=list(text=paste0("Profit by Gender, 2015-2020",
+                                                             '<br>',
+                                                             '<sup>',
+                                                             "Only matched sports")), xaxis=list(title="Year"), yaxis=list(title="Profit, in USD"))
+plot3.paired
+
+```
+
+
+
+
+Profit per Player
+==========================
+
+#### Profit per Player
+
+
+In taking a closer look at the profit of the Athletic Department, below are plots showing the profit per player by team and within Men's and Women's teams. Again, note that profit is negative across nearly every year, team and gender. To compare the profit per player within Men's versus Women's teams, since 2015,  Men's teams have decreased -\$72.578K (-273%) per player and the Women's teams have decreased -\$18.668K (-30%) per player. The largest loss of profit per player since 2015 is Women's Basketball and saw -\$318.081K in 2019 and -\$388.151K per player in 2019 and 2020. Men's Basketball had the largest decrease in profit per player with +\$43.140K per player in 2015 and -\$414.271K in 2020 (-1,060.3% decrease).
+
+We should note that from 2015 to 2020, the five teams with the lowest average loss per player have consistently been Women's Rowing, Men's Swimming and Diving, Men's Tennis, Men's Track and Field and Women's Track and Field. In 2019, the profit loss per player in Women's Basketball was between 9.9 and 15.3 times more than that of each of these five teams. 
+
+
+
+
+
+Column {data-width=650}
+----------------------------------
+
+
+### By Team
+```{r}
+plot14<-plot_ly(athletics[athletics$Gender=="Men" | athletics$Gender=="Women",],y=~diff.player, x=~Year, color=~team, type = 'scatter', mode='lines')
+plot14<-plot14 %>% layout(title="Profit per Player by team, 2015-2020", xaxis=list(title="Year"), yaxis=list(title="Profit, in USD"))
+plot14
+```
+
+
+Column {data-width=350}
+----------------------------------
+
+### All Teams
+```{r}
+plot7<-plot_ly(avg_athletics, x=~Group.2, y=~diff.player, color=~Group.1, type = "scatter", mode='lines')
+plot7<-plot7 %>% layout(title="Profit per Player by Gender, 2015-2020", xaxis=list(title="Year"), yaxis=list(title="Profit, in USD"))
+plot7
+```
+
+
+
+### Matched Teams Only
+
+```{r}
+plot7.paired<-plot_ly(avg_paired_athletics, x=~Group.2, y=~diff.player, color=~Group.1, type = "scatter", mode='lines')
+plot7.paired<-plot7.paired %>% layout(title=list(text=paste0("Profit Per Player by Gender, 2015-2020",
+                                                             '<br>',
+                                                             '<sup>',
+                                                             "Only matched sports")), xaxis=list(title="Year"), yaxis=list(title="Profit per Player, in USD"))
+plot7.paired
+
+```
+
+
+
+
+
+Revenue/Expenses Correlation Plot 
+==========================
+
+#### Correlation between Revenue and Selected Expense variables
+
+
+Below are the correlations between revenue and various expense variables, to better understand any linear relationships between revenue and expenses, from 2015 to 2020 across all teams. Variables with many zeros were excluded.
+
+Column {data-width=350}
+-----------------------------------------------------------------------
+
+### Correlation Plot, Selected Variables
+```{r}
+correlation<-cor(athletics[,c(4:15,18,20, 23, 25, 27:29)])
+corr1<-ggcorrplot(correlation, method = "square", type="upper")
+corr1
+```
+
+
+
+Revenue Model
+================
+
+#### Revenue Model
+
+
+Using the log(x+1) transformation of the response and a forward and backwards stepwise multiple linear regression model, the most appropriate model is  the Model shown below which gives us the following mean multiplicative effects on revenue:
+
+$\hat{Revenue} = exp(9.696 +0.0154*(N.Scholarships) + (5.533e-07)*(SupportStaff) + (3.689e-06)*(Travel) +  (3.778e-05)*(Memberships)$
+
+The interpretation of the statistically significant coefficients in the model are as follows. When Support Staff Expenses are increased by \$100,000, we would expect an average 5.69% increase in revenue that year. Similarly, when Travel is increased by \$10,000, we would expect to see a 3.76% increase in revenue on average. Lastly, as Memberships and Dues are increased (i.e. switching conferences), we would expect to see a 3.85% average increase in revenue.
+
+From the F statistic for overall fit, we can reject the null hypothesis and conclude that the model has an adequate fit for the data. This model accounts for 71.64% of the variability in revenue. Additionally in the model fit plots, the residuals are approximately normal and there does not appear to be any significant concerns with the model performance. 
+
+To improve this analysis and given that many years of reporting data are availible, we should fit a time series model (i.e. ARIMA, VAR) to determine how expenses in year t impact the revenue in year t+1.
+
+
+Column {data-width=350, .tabset}
+-----------------------------------------------------------------------
+
+
+
+
+
+
+### Summary of Revenue Model 
+
+```{r}
+summary(step_nogender)
+```
+
+
+### Model Fit Plots
+```{r}
+plot(step_nogender)
+```
+
+

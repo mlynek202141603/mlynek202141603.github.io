@@ -1,0 +1,291 @@
+Appendix File
+PART A- Comparing HR capabilities of the Polar Ignite and the Whoop 3.0 over one aerobic session (10k erg, 40:45.8, 2:02.2/500m)
+
+1. Create time series plot for WHOOP and Polar datasets 
+```{r}
+whoop_1108_endurancesession_data <- read.csv("~/Downloads/whoop_1108_endurancesession_data.csv")
+polar_1108_endurancesession_data <- read.csv("~/Downloads/polar_1108_endurancesession_data.csv")
+ts.plot(whoop_1108_endurancesession_data[2], ylab="HR (bpm)", xlab="Time (10 sec)", main="Whoop 3.0 Aerobic Session 11/08/19", ylim=c(110,180))
+ts.plot(polar_1108_endurancesession_data[2], ylab="HR (bpm)", main="Polar Aerobic Session 11/08/19", xlab="Time (10 sec)", ylim=c(110,180))
+```
+
+2. Prepare data- split into calibration and holdout sets for WHOOP and Polar, turn HR values into time series
+```{r}
+## WHOOP
+whoop_1108_endurancesession_data_CALIBRATION <- whoop_1108_endurancesession_data[-(203:252), ]
+whoop_1108_endurancesession_data_HOLDOUT <- whoop_1108_endurancesession_data[-(1:202), ]
+whoop_1108_endurancesession_data_CALIBRATION <- ts(whoop_1108_endurancesession_data_CALIBRATION[2])
+whoop_1108_endurancesession_data_HOLDOUT <- ts(whoop_1108_endurancesession_data_HOLDOUT[2])
+
+## Polar
+polar_1108_endurancesession_data_CALIBRATION <- polar_1108_endurancesession_data[-(203:252), ]
+polar_1108_endurancesession_data_HOLDOUT <- polar_1108_endurancesession_data[-c(1:202), ]
+polar_1108_endurancesession_data_CALIBRATION <- ts(polar_1108_endurancesession_data_CALIBRATION[2])
+polar_1108_endurancesession_data_HOLDOUT <- ts(polar_1108_endurancesession_data_HOLDOUT[2])
+```
+
+3. Model Identification
+```{r}
+library(tidyverse) 
+library(forecast) 
+library(fpp2)
+
+par(mfrow=c(2, 1))
+ts.plot(polar_1108_endurancesession_data_CALIBRATION, main="HR Measured by Polar Ignite")
+ts.plot(whoop_1108_endurancesession_data_CALIBRATION, main="HR Measured by Whoop 3.0")
+
+par(mfrow=c(2,1))
+acf(polar_1108_endurancesession_data_CALIBRATION, main="Polar ACF")
+acf(whoop_1108_endurancesession_data_CALIBRATION, main="Whoop ACF")
+
+par(mfrow=c(2,1))
+pacf(polar_1108_endurancesession_data_CALIBRATION, main="Polar PACF")
+pacf(whoop_1108_endurancesession_data_CALIBRATION, main="Whoop PACF")
+
+##POLAR-- from pacf looks like lag 2 is significant, AR(2)
+polar.fit1<-auto.arima(polar_1108_endurancesession_data_CALIBRATION)
+summary(polar.fit1)
+polar.fit2<- arima(polar_1108_endurancesession_data_CALIBRATION, order=c(2,0,0))
+summary(polar.fit2)
+##but from the auto.arima function, we can see that ARIMA(0,1,1) model is more appropriate
+
+## WHOOP--from pacf looks like lag 2 is significant, AR(2)
+whoop.fit1<-auto.arima(whoop_1108_endurancesession_data_CALIBRATION)
+whoop.fit2 <- arima(whoop_1108_endurancesession_data_CALIBRATION, order=c(2,0,0))
+summary(whoop.fit1)
+summary(whoop.fit2)
+##but from auto.arima function, we can see that the ARIMA(0,1,1) model WITH DRIFT is more appropriate
+
+```
+
+
+```{r}
+## PART 3-- MODEL ACCURACY
+##whoop
+par(mfrow=c(3, 2))
+plot(whoop.fit1$residuals, xlab="Time (10 sec)", ylab="Residuals", main="Whoop Residuals from ARIMA(0,1,1) with drift")
+plot(polar.fit1$residuals, ylab="Residuals", xlab="Time (10 sec)", main="Polar Residuals from ARIMA(0,1,1)")
+qqnorm(whoop.fit1$residuals,main="Normal Q-Q plot (WHOOP)",xlab="Residual")
+qqnorm(polar.fit1$residuals,main="Normal Q-Q plot (Polar)",xlab="Residual")
+hist(whoop.fit1$residuals,main="Residuals Histogram (WHOOP)",xlab="Residual")
+hist(polar.fit1$residuals,main="Residuals Histogram (Polar)",xlab="Residual")
+
+
+#####################
+whoop.fit1.resid <- whoop.fit1$residuals
+
+##Shapiro-Wilk test for normality
+shapiro.test(whoop.fit1.resid) 
+##  H0: normal
+## HA : not normal
+##conclusion: residuals not normally distributed
+
+# Ljung-Box Portmanteau test for Model Adequacy
+whoop.box <- Box.test(whoop.fit1.resid,type="Ljung")
+whoop.box
+##  H0: p1=p2=0 (auto correlations are equal to 0, model does not show lack of fit)
+##  HA: at least one is not equal to 0
+##  p=.5462 so model is adequate
+
+polar.fit1.resid <- polar.fit1$residuals
+
+##Shapiro-Wilk test for normality
+shapiro.test(polar.fit1.resid) 
+##  H0: normal
+## HA : not normal
+##conclusion: residuals not normally distributed
+
+# Ljung-Box Portmanteau test for Model Adequacy
+whoop.box <- Box.test(polar.fit1.resid,type="Ljung")
+whoop.box
+##  H0: p1=p2=0 (auto correlations are equal to 0, model does not show lack of fit)
+##  HA: at least one is not equal to 0
+##  p=.9704 so model is adequate
+```
+
+```{r}
+# Forecast Holdout Observations
+whoop_forecast <- forecast(whoop.fit1, h=50)
+plot(whoop_forecast)
+
+err.whoop_forecast <- as.numeric(whoop_1108_endurancesession_data_HOLDOUT)-whoop_forecast$mean
+err.whoop_forecast
+plot(err.whoop_forecast, main="Difference between Holdout Values and Forecasted Values, Whoop")
+# Forecast Evaluation Criteria based on Holdout Prediction
+
+me.err.whoop=mean(err.whoop_forecast)
+mpe.err.whoop=100*(mean(err.whoop_forecast/as.numeric(whoop_1108_endurancesession_data_HOLDOUT)))
+mse.err.whoop=sum(err.whoop_forecast**2)/length(err.whoop_forecast)
+mae.err.whoop=mean(abs(err.whoop_forecast))
+mape.err.whoop=100*(mean(abs((err.whoop_forecast)/as.numeric(whoop_1108_endurancesession_data_HOLDOUT))))
+me.err.whoop
+mpe.err.whoop
+mse.err.whoop
+mae.err.whoop
+mape.err.whoop
+```
+
+```{r}
+##polar
+# Forecast Holdout Observations
+polar_forecast <- forecast(polar.fit1, h=50)
+plot(polar_forecast)
+
+err.polar_forecast <- as.numeric(polar_1108_endurancesession_data_HOLDOUT)-polar_forecast$mean
+err.polar_forecast
+plot(err.polar_forecast, main="Difference between Holdout Values and Forecasted Values, Polar")
+
+# Forecast Evaluation Criteria based on Holdout Prediction
+
+me.err.polar=mean(err.polar_forecast)
+mpe.err.polar=100*(mean(err.polar_forecast/as.numeric(polar_1108_endurancesession_data_HOLDOUT)))
+mse.err.polar=sum(err.polar_forecast**2)/length(err.polar_forecast)
+mae.err.polar=mean(abs(err.polar_forecast))
+mape.err.polar=100*(mean(abs((err.polar_forecast)/as.numeric(polar_1108_endurancesession_data_HOLDOUT))))
+me.err.polar
+mpe.err.polar
+mse.err.polar
+mae.err.polar
+mape.err.polar
+```
+
+```{r}
+
+## 95% CI for theta1 (ma1 coeff) of polar model
+polar.ma.CI_U <- polar.fit1$coef + 0.95*0.0669
+polar.ma.CI_L <- polar.fit1$coef - 0.95*0.0669
+polar.ma.CI_L
+polar.ma.CI_U
+
+## 95% CI for theta1 (ma1 coeff) of polar model
+whoop.ma.CI_U <- whoop.fit1$coef + 0.95*0.0595
+whoop.ma.CI_L <- whoop.fit1$coef - 0.95*0.0595
+whoop.ma.CI_L
+whoop.ma.CI_U
+##95% CI of theta1 of polar model-- (0.3276854, 0.4547954)
+##95% CI of theta1 of whoop model-- (0.4491244, 0.5621744)
+
+##t test to compare theta1 values for whoop and polar
+##polar sd-- 
+sd.polar <- .0669*sqrt(202)
+sd.whoop <- 0.0595*sqrt(2020)
+se.pooled <- sqrt(((sd.polar^2)/202)+((sd.whoop^2)/202))
+t <- (.3912404-.5056)/se.pooled
+t
+pt(t, (202+202-2))
+
+##H0: theta1(polar)=theta1(whoop)
+##HA: theta1(polar) not equal to theta1(whoop)
+##    p-value=0.2834-- fail to reject H0
+
+##########CONCLUSION-- no difference between the model parameters for whoop and polar
+
+```
+
+
+Part B- analyze whoop data over month, 8 varaibles, determine how they are related and over what lags they are related
+```{r}
+##Insert data- all variables, all observations 09/26/2019-11/30/2019, notice NAs
+whoopdata_3.0 <- read.csv("~/Downloads/whoopdata-3/whoopdata_3.0.csv")
+
+
+### Split dataset into 2 sets (keeping all other varaibles the same): 
+###     training/model set is 09/26/19-10/21/19 (because this was the larger run of data)
+###     test set is 10/31/19-11/14/19 (this will be used to test the model found from the training set)
+whoopdata_0926_1021<- whoopdata_3.0[c(1:26), ]
+whoopdata_1031_1114<- whoopdata_3.0[c(36:50), ]
+
+#plots
+par(mfrow=c(4, 2))
+whoop_hrv_ts <- ts(whoopdata_0926_1021$recovery_hrv)
+ts.plot(whoop_hrv_ts, main="HRV", ylab="ms", xlab="Time (day)")
+whoop_rhr_ts <- ts(whoopdata_0926_1021$recovery_rhr)
+ts.plot(whoop_rhr_ts, main="RHR", ylab="bpm", xlab="Time (day)")
+whoop_resp_rate_ts <- ts(whoopdata_0926_1021$sleep_respiratory_rate)
+ts.plot(whoop_resp_rate_ts, main="Respiratory Rate", ylab="breath/min", xlab="Time (day)")
+whoop_sleep_light_ts <- ts(whoopdata_0926_1021$sleep_respiratory_rate)
+ts.plot(whoop_sleep_light_ts,main="Duration Sleep- Light", ylab="Hours", xlab="Time (day)")
+whoop_sleep_rem_ts <- ts(whoopdata_0926_1021$sleep_duration_rem)
+ts.plot(whoop_sleep_rem_ts, main="Duration Sleep- REM", ylab="Hours", xlab="Time (day)")
+whoop_sleep_deep_ts <- ts(whoopdata_0926_1021$sleep_duration_deep)
+ts.plot(whoop_sleep_deep_ts, main="Duration Sleep- Deep", ylab="Hours", xlab="Time (day)")
+whoop_maxhr_ts <- ts(whoopdata_0926_1021$strain_maxhr)
+ts.plot(whoop_maxhr_ts, main="Max HR", ylab="bpm", xlab="Time (day)")
+whoop_avghr_ts <- ts(whoopdata_0926_1021$strain_avghr)
+ts.plot(whoop_avghr_ts, main="Average HR", ylab="bpm", xlab="Time (day)")
+
+library(tidyverse) 
+library(forecast) 
+library(fpp2)
+
+whoop_hrv_fit <- auto.arima(whoop_hrv_ts)
+whoop_rhr_fit <- auto.arima(whoop_rhr_ts)
+whoop_resp_rate_fit <- auto.arima(whoop_resp_rate_ts)
+whoop_sleep_light_fit <- auto.arima(whoop_sleep_light_ts)
+whoop_sleep_rem_fit <- auto.arima(whoop_sleep_rem_ts)
+whoop_sleep_deep_fit <- auto.arima(whoop_sleep_rem_ts)
+whoop_avghr_fit <- auto.arima(whoop_avghr_ts)
+whoop_maxhr_fit <- auto.arima(whoop_maxhr_ts)
+
+summary(whoop_hrv_fit)
+summary(whoop_rhr_fit)
+summary(whoop_sleep_light_fit)
+summary(whoop_sleep_rem_fit)
+summary(whoop_sleep_deep_fit)
+summary(whoop_avghr_fit)
+summary(whoop_maxhr_fit)
+
+###All White Noise processes, so lets look at the vector time series model instead
+
+##check correlations, I used all data because it gave me more observations, its ok if you have missing data because correlations doesnt need to be time series, this is just background info to see if there is anything interesting
+cor(whoopdata_3.0, use="pairwise")
+whoop.cor <- cor(whoopdata_3.0, use = 'pairwise')
+library(corrplot)
+corrplot(whoop.cor)
+
+library("Hmisc")
+cor <- rcorr(as.matrix(whoopdata_3.0))
+cor
+
+### Relationship might exist between:
+##    RHR and HRV (p=0.0000)
+##    Resp Rate and HRV (p=0.0006)
+##    Resp Rate and RHR (p=0.0000)
+##    Duration REM and HRV (p=0.0090)
+##    Duration REM and Resp Rate (p=0.0120)
+##    Deep sleep and HRV (p=0.0298)
+##    Deep Sleep and REM (p=0.0000)
+##    Avg HR and Duration Light (p=0.0332)
+##    Avg HR and Duration REM (p=0.0012)
+##    Avg HR and Duration Deep (p=0.0019)
+##    Max HR and Avg HR (p=0.0000)
+
+
+## then check if we should remove any variables from the time series
+cor(whoopdata_0926_1021) ###none over 0.95 so leave all variables in
+
+
+### Lets move on to VAR model (make a model for all the variables)
+library(vars) 
+whoop_3best <- VARselect(whoopdata_0926_1021,lag.max=10,type="none")
+whoop_3best
+
+ ###based on SC criterion, VAR(2) model is best
+
+## make 8 models (one VAR model), one for each of the variables, notice with other variables at which lags are statistically significant
+whoop3.0.fit <- VAR(whoopdata_0926_1021, p=2, type="none")
+summary(whoop3.0.fit)
+
+
+##Lets now use the model to predict the next 15 and see if they are similar to the data we got after the missing week from 10/26-10/30 (starting day 6 of the 15 predicted days)
+# Prediction using a VAR(2) model with Intercept 
+whoop.pred <- predict(whoop3.0.fit,n.ahead=15,ci=0.95)
+whoop.pred
+
+fanchart(whoop.pred)
+
+##these are not helpful predcitions because the CI is so wide, this is because it is difficult to predict any more than 3 days into the future.
+
+```
+
+
